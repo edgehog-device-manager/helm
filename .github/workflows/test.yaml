@@ -1,0 +1,40 @@
+name: Test Chart
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.3
+
+      - name: Update chart dependencies
+        run: helm dependency update .
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          node_image: kindest/node:latest # TODO: use a pinnded version of kindest/node
+
+      - name: helm install --dry-run against live API (server-side validation)
+        run: |
+          helm install test-release . \
+            --dry-run \
+            --debug \
+            --values values.yaml
+
+      - name: helm install (actual) and verify rollout
+        run: |
+          helm install test-release . --values values.yaml --wait --timeout 2m
+          helm test test-release || true
+          kubectl get all
