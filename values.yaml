@@ -42,11 +42,23 @@ url:
 ingress:
   enabled: true
   className: nginx
+  ## Preset annotations for the ingress controller in use: nginx | haproxy | none.
+  ## - nginx: proxy-body-size (from storage.maxUploadSizeBytes) + read/send timeouts
+  ## - haproxy: haproxy.org/timeout-server (from ingress.proxyReadTimeout)
+  ## - none: only the annotations below
+  controller: nginx
   ## Extra annotations for the Ingress object.
   annotations: {}
   tls:
     enabled: true
     secretName: edgehog-tls
+    ## When enabled, a cert-manager Certificate is rendered for all hosts and
+    ## the matching issuer annotation is added to the Ingress.
+    certManager:
+      enabled: false
+      issuerRef:
+        name: letsencrypt-http-cluster-issuer
+        kind: ClusterIssuer
   ## Override for nginx.ingress.kubernetes.io/proxy-body-size.
   ## Defaults to storage.maxUploadSizeBytes.
   proxyBodySize: ""
@@ -148,7 +160,7 @@ postgresql:
 ## ---------------------------------------------------------------------------
 storage:
   type: s3              # s3 | azure
-  maxUploadSizeBytes: "4000000000"
+  maxUploadSizeBytes: "5000000000"
 
   s3:
     scheme: https
@@ -194,21 +206,26 @@ geolocation:
 
 ## ---------------------------------------------------------------------------
 ## Authorization (OpenFGA)
+##
+## Active Edgehog deployments commonly run with the backend default (none).
+## To enable fine-grained authorization, set provider to openfga AND enable
+## the openfga subchart below.
 ## ---------------------------------------------------------------------------
 authorization:
-  provider: openfga     # none | openfga
+  provider: none        # none | openfga
   ## gRPC endpoint of OpenFGA. Defaults to <release>-openfga:8081 when the
   ## bundled subchart is enabled.
   grpcEndpoint: ""
   ## Explicit store/model IDs. When set they take precedence over the secret
-  ## created by openfgaInitJob.
+  ## created by openfgaInitJob. Recommended under GitOps (Argo CD), since the
+  ## job-written secret is not tracked as a regular manifest.
   storeId: ""
   authModelId: ""
   ## Alternative source for the IDs; keys: store-id, auth-model-id.
   existingStoreSecret: ""
 
 openfga:
-  enabled: true
+  enabled: false
   datastore:
     engine: memory
   ## Helm merges this chart's top-level values into same-named subchart

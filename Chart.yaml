@@ -2,7 +2,7 @@ apiVersion: v2
 name: edgehog
 description: A Helm chart for Edgehog, the Open Source Device Manager Platform by SECO Mind
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.13.1"
 kubeVersion: ">=1.23.0-0"
 home: https://edgehog.io

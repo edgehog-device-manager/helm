@@ -59,13 +59,21 @@ database:
   password: ...        # or use existingSecret
 ```
 
-### Disabling OpenFGA / Device Forwarder
+### Enabling OpenFGA / Device Forwarder
+
+Authorization defaults to the backend's `none` provider (matching typical
+deployments). To enable OpenFGA, flip both flags:
 
 ```yaml
 authorization:
-  provider: none       # skips OpenFGA entirely
+  provider: openfga
 openfga:
-  enabled: false
+  enabled: true
+```
+
+The forwarder is enabled by default; disable it with:
+
+```yaml
 forwarder:
   enabled: false
 ```
@@ -120,6 +128,59 @@ curl -X POST "https://api.edgehog.example.com/admin-api/v1/tenants" \
 
 See the [official deployment guide](https://docs.edgehog.io/deploying_with_kubernetes.html)
 for details.
+
+## GitOps / External Secrets
+
+Every secret consumed by the chart can be sourced from an existing Kubernetes
+Secret instead of values, which is the recommended setup under GitOps
+(Argo CD / Flux) together with the [External Secrets Operator](https://external-secrets.io):
+
+| Secret | Values knob | Expected keys |
+|---|---|---|
+| Phoenix key base (backend) | `backend.existingSecret` | `secret-key-base` |
+| Phoenix key base (forwarder) | `forwarderConfig.existingSecret` | `secret-key-base` |
+| Database credentials | `database.existingSecret` | username, password (+ hostname via `database.hostname`) |
+| Admin API public key | `backend.adminApi.existingSecret` | `admin_public.pem` |
+| S3 credentials | `storage.s3.existingSecret` | access-key-id, secret-access-key (or gcp-credentials) |
+| Azure credentials | `storage.azure.existingSecret` | connection-string or account-name/account-key |
+| Geolocation API keys | `geolocation.existingSecret` | ipbase-api-key, google-geolocation-api-key, google-geocoding-api-key |
+| OpenFGA store IDs | `authorization.existingStoreSecret` | store-id, auth-model-id |
+
+Example modeled on a GCP Secret Manager-backed ClusterSecretStore:
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: edgehog-secret-key-base
+spec:
+  refreshInterval: 2m0s
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcpsm-ss
+  target:
+    name: edgehog-secret-key-base
+  data:
+    - secretKey: secret-key-base
+      remoteRef:
+        key: edgehog-secret-key-base
+```
+
+```yaml
+backend:
+  existingSecret: edgehog-secret-key-base
+```
+
+### Argo CD caveats
+
+- **Avoid generated secrets.** When no explicit value or `existingSecret` is
+  given, the chart generates secret key bases with `randAlphaNum`, which
+  re-renders to a new value on every sync and causes permanent `OutOfSync`
+  drift. Under Argo CD always provide them via External Secrets.
+- **OpenFGA store IDs.** The pre-install init Job writes its result into a
+  Secret that is not tracked as a regular manifest. For GitOps installs prefer
+  explicit `authorization.storeId` / `authorization.authModelId` (or an
+  `existingStoreSecret`) over the job-generated one.
 
 ## Upgrading
 

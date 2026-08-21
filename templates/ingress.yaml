@@ -1,3 +1,4 @@
+{{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -5,9 +6,20 @@ metadata:
   labels:
     {{- include "edgehog.labels" . | nindent 4 }}
   annotations:
+    {{- if eq .Values.ingress.controller "nginx" }}
     nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.proxyBodySize | default .Values.storage.maxUploadSizeBytes | quote }}
     nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyReadTimeout | quote }}
     nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxySendTimeout | quote }}
+    {{- else if eq .Values.ingress.controller "haproxy" }}
+    haproxy.org/timeout-server: {{ printf "%ss" .Values.ingress.proxyReadTimeout | quote }}
+    {{- end }}
+    {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled }}
+    {{- if eq .Values.ingress.tls.certManager.issuerRef.kind "ClusterIssuer" }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.certManager.issuerRef.name }}
+    {{- else if eq .Values.ingress.tls.certManager.issuerRef.kind "Issuer" }}
+    cert-manager.io/issuer: {{ .Values.ingress.tls.certManager.issuerRef.name }}
+    {{- end }}
+    {{- end }}
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -60,3 +72,4 @@ spec:
                 port:
                   number: 4000
     {{- end }}
+{{- end }}
