@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: helm lint
-        run: helm lint . --strict
+        run: helm lint . --strict --values ci-values.yaml
 
       - name: yamllint
         run: |
@@ -42,5 +42,5 @@ jobs:
 
       - name: Render templates and validate against Kubernetes schemas
         run: |
-          helm template . --values values.yaml \
+          helm template . --values ci-values.yaml \
             | kubeconform -strict -summary -kubernetes-version "1.30.0"

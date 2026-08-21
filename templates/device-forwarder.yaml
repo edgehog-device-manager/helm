@@ -7,20 +7,20 @@ metadata:
   labels:
     {{- include "edgehog.componentLabels" (dict "root" . "component" "device-forwarder") | nindent 4 }}
 spec:
-  replicas: {{ .Values.forwarderConfig.replicaCount }}
+  replicas: {{ .Values.forwarder.replicaCount }}
   selector:
     matchLabels:
       {{- include "edgehog.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: device-forwarder
   template:
     metadata:
-      {{- with .Values.forwarderConfig.podAnnotations }}
+      {{- with .Values.forwarder.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
         {{- include "edgehog.componentLabels" (dict "root" . "component" "device-forwarder") | nindent 8 }}
-        {{- with .Values.forwarderConfig.podLabels }}
+        {{- with .Values.forwarder.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
@@ -28,16 +28,15 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "edgehog.serviceAccountName" . }}
-      {{- with .Values.forwarderConfig.podSecurityContext }}
+      {{- with .Values.forwarder.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: edgehog-device-forwarder
-          image: {{ include "edgehog.image" (dict "root" . "image" .Values.forwarderConfig.image "defaultTag" "0.1.0") }}
-          imagePullPolicy: {{ .Values.forwarderConfig.image.pullPolicy }}
-          {{- with .Values.forwarderConfig.securityContext }}
+          image: {{ include "edgehog.image" (dict "root" . "image" .Values.forwarder.image "defaultTag" "0.1.0") }}
+          imagePullPolicy: {{ .Values.forwarder.image.pullPolicy }}
+          {{- with .Values.forwarder.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -45,47 +44,47 @@ spec:
             - name: RELEASE_NAME
               value: edgehog-device-forwarder
             - name: PORT
-              value: {{ .Values.forwarderConfig.containerPort | quote }}
+              value: {{ .Values.forwarder.containerPort | quote }}
             - name: PHX_HOST
               value: {{ required "forwarder.host is required when forwarder.enabled is true" .Values.forwarder.host | quote }}
             - name: SECRET_KEY_BASE
-              {{- if .Values.forwarderConfig.existingSecret }}
+              {{- if .Values.forwarder.existingSecret }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.forwarderConfig.existingSecret }}
-                  key: {{ .Values.forwarderConfig.existingSecretKey }}
+                  name: {{ .Values.forwarder.existingSecret }}
+                  key: {{ .Values.forwarder.existingSecretKey }}
               {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ $fullname }}
-                  key: forwarder-{{ .Values.forwarderConfig.existingSecretKey }}
+                  key: forwarder-{{ .Values.forwarder.existingSecretKey }}
               {{- end }}
-            {{- with .Values.forwarderConfig.extraEnv }}
+            {{- with .Values.forwarder.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.forwarderConfig.extraEnvFrom }}
+          {{- with .Values.forwarder.extraEnvFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
             - name: http
-              containerPort: {{ .Values.forwarderConfig.containerPort }}
+              containerPort: {{ .Values.forwarder.containerPort }}
               protocol: TCP
           livenessProbe:
-            {{- toYaml .Values.forwarderConfig.livenessProbe | nindent 12 }}
+            {{- toYaml .Values.forwarder.livenessProbe | nindent 12 }}
           readinessProbe:
-            {{- toYaml .Values.forwarderConfig.readinessProbe | nindent 12 }}
+            {{- toYaml .Values.forwarder.readinessProbe | nindent 12 }}
           resources:
-            {{- toYaml .Values.forwarderConfig.resources | nindent 12 }}
-      {{- with .Values.forwarderConfig.nodeSelector }}
+            {{- toYaml .Values.forwarder.resources | nindent 12 }}
+      {{- with .Values.forwarder.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.forwarderConfig.affinity }}
+      {{- with .Values.forwarder.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.forwarderConfig.tolerations }}
+      {{- with .Values.forwarder.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

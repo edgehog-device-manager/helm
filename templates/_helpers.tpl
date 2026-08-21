@@ -39,15 +39,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
-{{/* Create the name of the service account to use. */}}
-{{- define "edgehog.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "edgehog.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
-{{- end }}
-
 {{/* Image reference resolver.
 Call with dict "root" . "image" <image values map> "defaultTag" <fallback tag>. */}}
 {{- define "edgehog.image" -}}
@@ -60,21 +51,12 @@ Call with dict "root" . "image" <image values map> "defaultTag" <fallback tag>. 
 
 {{/* External URL scheme for backend/frontend URLs. */}}
 {{- define "edgehog.urlScheme" -}}
-{{- default (ternary "https" "http" .Values.ingress.tls.enabled) .Values.url.scheme }}
+{{- default "https" .Values.url.scheme }}
 {{- end }}
 
 {{/* URL port suffix (empty string when standard or unset). */}}
 {{- define "edgehog.urlPortSuffix" -}}
 {{- if .Values.url.port }}:{{ .Values.url.port }}{{- end }}
-{{- end }}
-
-{{/* Database hostname. */}}
-{{- define "edgehog.databaseHostname" -}}
-{{- if .Values.postgresql.enabled }}
-{{- printf "%s-postgresql" .Release.Name }}
-{{- else }}
-{{- required "database.hostname is required when postgresql.enabled is false" .Values.database.hostname }}
-{{- end }}
 {{- end }}
 
 {{/* Secret key base resolver.
@@ -103,25 +85,7 @@ key bases survive upgrades. */}}
 {{- end }}
 {{- end }}
 
-{{/* Name of the secret holding OpenFGA store/model IDs. */}}
-{{- define "edgehog.openfgaStoreSecretName" -}}
-{{- if .Values.authorization.existingStoreSecret }}
-{{- .Values.authorization.existingStoreSecret }}
-{{- else }}
-{{- default (printf "%s-openfga-store" (include "edgehog.fullname" .)) .Values.openfgaInitJob.secretName }}
-{{- end }}
-{{- end }}
-
-{{/* gRPC endpoint of OpenFGA. */}}
-{{- define "edgehog.openfgaGrpcEndpoint" -}}
-{{- if .Values.authorization.grpcEndpoint }}
-{{- .Values.authorization.grpcEndpoint }}
-{{- else }}
-{{- printf "%s-openfga:8081" .Release.Name }}
-{{- end }}
-{{- end }}
-
 {{/* External port devices use to reach the Device Forwarder. */}}
 {{- define "edgehog.forwarderExternalPort" -}}
-{{- default (ternary "443" "80" .Values.ingress.tls.enabled) (toString .Values.forwarderConfig.externalPort) }}
+{{- default (ternary "443" "80" (eq (include "edgehog.urlScheme" .) "https")) (toString .Values.forwarder.externalPort) }}
 {{- end }}

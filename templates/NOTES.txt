@@ -10,13 +10,8 @@ URLs:
   Device Forwarder: {{ $scheme }}://{{ .Values.forwarder.host }}{{ $portSuffix }}
   {{- end }}
 
-Make sure the DNS names above point to your ingress controller before continuing.
-
-{{- if and (eq .Values.authorization.provider "openfga") (not .Values.authorization.storeId) }}
-
-OpenFGA store IDs were written to the "{{ include "edgehog.openfgaStoreSecretName" . }}" secret
-by the openfga-init job.
-{{- end }}
+Make sure the DNS names above point at your routing (e.g. an Ingress managed
+outside of this chart) before continuing.
 
 Next steps:
 

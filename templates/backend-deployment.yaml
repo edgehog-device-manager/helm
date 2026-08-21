@@ -29,7 +29,6 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "edgehog.serviceAccountName" . }}
       {{- with .Values.backend.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -60,49 +59,19 @@ spec:
               value: {{ .Values.url.port | quote }}
             {{- end }}
             - name: DATABASE_HOSTNAME
-              value: {{ include "edgehog.databaseHostname" . | quote }}
+              value: {{ required "backend.database.hostname is required" .Values.backend.database.hostname | quote }}
             - name: DATABASE_USERNAME
-              value: {{ .Values.database.username | quote }}
+              value: {{ .Values.backend.database.username | quote }}
             - name: DATABASE_NAME
-              value: {{ .Values.database.database | quote }}
+              value: {{ .Values.backend.database.database | quote }}
             - name: DATABASE_PASSWORD
-              {{- if .Values.database.existingSecret }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
-                  key: {{ .Values.database.existingSecretPasswordKey }}
-              {{- else if and (not .Values.postgresql.enabled) .Values.database.password }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $fullname }}-db
-                  key: password
-              {{- else if not .Values.postgresql.enabled }}
-              {{- fail "database.password or database.existingSecret is required when postgresql.enabled is false" }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ printf "%s-postgresql" .Release.Name }}
-                  key: password
-              {{- end }}
-            {{- if .Values.database.poolSize }}
+                  name: {{ required "backend.database.passwordExistingSecret is required" .Values.backend.database.passwordExistingSecret }}
+                  key: {{ .Values.backend.database.passwordExistingSecretKey }}
+            {{- if .Values.backend.database.poolSize }}
             - name: POOL_SIZE
-              value: {{ .Values.database.poolSize | quote }}
-            {{- end }}
-            {{- if .Values.database.tls.enabled }}
-            - name: DATABASE_ENABLE_SSL
-              value: "true"
-            {{- if .Values.database.tls.cacertPem }}
-            - name: DATABASE_SSL_CACERTFILE
-              value: /db-certs/ca.crt
-            {{- end }}
-            {{- if .Values.database.tls.verify }}
-            - name: DATABASE_SSL_VERIFY
-              value: "true"
-            {{- end }}
-            {{- if .Values.database.tls.useOsCerts }}
-            - name: DATABASE_USE_OS_CERTS
-              value: "true"
-            {{- end }}
+              value: {{ .Values.backend.database.poolSize | quote }}
             {{- end }}
             - name: SECRET_KEY_BASE
               {{- if .Values.backend.existingSecret }}
@@ -116,9 +85,9 @@ spec:
                   name: {{ $fullname }}
                   key: {{ .Values.backend.existingSecretKey }}
               {{- end }}
-            {{- if .Values.storage.maxUploadSizeBytes }}
+            {{- if .Values.backend.storage.maxUploadSizeBytes }}
             - name: MAX_UPLOAD_SIZE_BYTES
-              value: {{ .Values.storage.maxUploadSizeBytes | quote }}
+              value: {{ .Values.backend.storage.maxUploadSizeBytes | quote }}
             {{- end }}
             - name: ADMIN_JWT_PUBLIC_KEY_PATH
               value: /keys/admin_public.pem
@@ -128,7 +97,7 @@ spec:
             - name: EDGEHOG_FORWARDER_PORT
               value: {{ include "edgehog.forwarderExternalPort" . | quote }}
             - name: EDGEHOG_FORWARDER_SECURE_SESSIONS
-              value: {{ ternary "true" "false" .Values.ingress.tls.enabled | quote }}
+              value: {{ ternary "true" "false" (eq $scheme "https") | quote }}
             {{- end }}
             {{- if .Values.backend.gqlSubscriptionsAllowedOrigins }}
             - name: GQL_SUBSCRIPTIONS_ALLOWED_ORIGINS
@@ -137,18 +106,18 @@ spec:
             - name: GQL_SUBSCRIPTIONS_ALLOWED_ORIGINS
               value: {{ printf "%s://%s%s" $scheme .Values.frontend.host $portSuffix | quote }}
             {{- end }}
-            {{- if eq .Values.storage.type "azure" }}
+            {{- if eq .Values.backend.storage.type "azure" }}
             - name: STORAGE_TYPE
               value: azure
             - name: AZURE_CONTAINER
-              value: {{ required "storage.azure.container is required" .Values.storage.azure.container | quote }}
-            {{- if .Values.storage.azure.existingSecret }}
+              value: {{ required "backend.storage.azure.container is required" .Values.backend.storage.azure.container | quote }}
+            {{- if .Values.backend.storage.azure.existingSecret }}
             - name: AZURE_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.storage.azure.existingSecret }}
-                  key: {{ .Values.storage.azure.existingSecretConnectionStringKey }}
-            {{- else if .Values.storage.azure.connectionString }}
+                  name: {{ .Values.backend.storage.azure.existingSecret }}
+                  key: {{ .Values.backend.storage.azure.existingSecretConnectionStringKey }}
+            {{- else if .Values.backend.storage.azure.connectionString }}
             - name: AZURE_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
@@ -165,27 +134,27 @@ spec:
                 secretKeyRef:
                   name: {{ $fullname }}-azure
                   key: account-key
-            {{- if .Values.storage.azure.blobEndpoint }}
+            {{- if .Values.backend.storage.azure.blobEndpoint }}
             - name: AZURE_BLOB_ENDPOINT
-              value: {{ .Values.storage.azure.blobEndpoint | quote }}
+              value: {{ .Values.backend.storage.azure.blobEndpoint | quote }}
             {{- end }}
-            {{- if .Values.storage.azure.region }}
+            {{- if .Values.backend.storage.azure.region }}
             - name: AZURE_REGION
-              value: {{ .Values.storage.azure.region | quote }}
+              value: {{ .Values.backend.storage.azure.region | quote }}
             {{- end }}
             {{- end }}
             {{- else }}
-            {{- $s3 := .Values.storage.s3 }}
+            {{- $s3 := .Values.backend.storage.s3 }}
             - name: S3_SCHEME
               value: {{ $s3.scheme | quote }}
             - name: S3_HOST
-              value: {{ required "storage.s3.host is required" $s3.host | quote }}
+              value: {{ required "backend.storage.s3.host is required" $s3.host | quote }}
             {{- if $s3.port }}
             - name: S3_PORT
               value: {{ $s3.port | quote }}
             {{- end }}
             - name: S3_BUCKET
-              value: {{ required "storage.s3.bucket is required" $s3.bucket | quote }}
+              value: {{ required "backend.storage.s3.bucket is required" $s3.bucket | quote }}
             {{- if $s3.region }}
             - name: S3_REGION
               value: {{ $s3.region | quote }}
@@ -194,12 +163,12 @@ spec:
             - name: S3_ASSET_HOST
               value: {{ $s3.assetHost | quote }}
             {{- end }}
-            {{- if $s3.gcpCredentialsJson }}
+            {{- if $s3.gcpCredentialsExistingSecret }}
             - name: S3_GCP_CREDENTIALS
               valueFrom:
                 secretKeyRef:
-                  name: {{ $fullname }}-s3
-                  key: gcp-credentials
+                  name: {{ $s3.gcpCredentialsExistingSecret }}
+                  key: {{ $s3.gcpCredentialsExistingSecretKey }}
             {{- else if $s3.existingSecret }}
             - name: S3_ACCESS_KEY_ID
               valueFrom:
@@ -224,27 +193,47 @@ spec:
                   key: secret-access-key
             {{- end }}
             {{- end }}
-            {{- $geo := .Values.geolocation }}
-            {{- if $geo.ipbaseApiKey }}
+            {{- $geo := .Values.backend.geolocation }}
+            {{- if and (not $geo.existingSecret) $geo.ipbaseApiKey }}
             - name: IPBASE_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $fullname }}-geo
                   key: ipbase-api-key
             {{- end }}
-            {{- if $geo.googleGeolocationApiKey }}
+            {{- if and (not $geo.existingSecret) $geo.googleGeolocationApiKey }}
             - name: GOOGLE_GEOLOCATION_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $fullname }}-geo
                   key: google-geolocation-api-key
             {{- end }}
-            {{- if $geo.googleGeocodingApiKey }}
+            {{- if and (not $geo.existingSecret) $geo.googleGeocodingApiKey }}
             - name: GOOGLE_GEOCODING_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $fullname }}-geo
                   key: google-geocoding-api-key
+            {{- end }}
+            {{- if $geo.existingSecret }}
+            - name: IPBASE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $geo.existingSecret }}
+                  key: ipbase-api-key
+                  optional: true
+            - name: GOOGLE_GEOLOCATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $geo.existingSecret }}
+                  key: google-geolocation-api-key
+                  optional: true
+            - name: GOOGLE_GEOCODING_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $geo.existingSecret }}
+                  key: google-geocoding-api-key
+                  optional: true
             {{- end }}
             {{- if $geo.preferredGeolocationProviders }}
             - name: PREFERRED_GEOLOCATION_PROVIDERS
@@ -254,30 +243,7 @@ spec:
             - name: PREFERRED_GEOCODING_PROVIDERS
               value: {{ $geo.preferredGeocodingProviders | quote }}
             {{- end }}
-            {{- if eq .Values.authorization.provider "openfga" }}
-            - name: EDGEHOG_AUTHZ_PROVIDER
-              value: openfga
-            - name: EDGEHOG_OPENFGA_GRPC_ENDPOINT
-              value: {{ include "edgehog.openfgaGrpcEndpoint" . | quote }}
-            {{- if .Values.authorization.storeId }}
-            - name: EDGEHOG_OPENFGA_STORE_ID
-              value: {{ .Values.authorization.storeId | quote }}
-            - name: EDGEHOG_OPENFGA_AUTH_MODEL_ID
-              value: {{ .Values.authorization.authModelId | quote }}
-            {{- else }}
-            - name: EDGEHOG_OPENFGA_STORE_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "edgehog.openfgaStoreSecretName" . }}
-                  key: store-id
-            - name: EDGEHOG_OPENFGA_AUTH_MODEL_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "edgehog.openfgaStoreSecretName" . }}
-                  key: auth-model-id
-            {{- end }}
-            {{- end }}
-            {{- with .Values.tuning }}
+            {{- with .Values.backend }}
             {{- if .tenantReconcilerTimeoutMs }}
             - name: EDGEHOG_TENANT_RECONCILER_TIMEOUT
               value: {{ .tenantReconcilerTimeoutMs | quote }}
@@ -316,11 +282,6 @@ spec:
             - name: admin-public-key
               mountPath: /keys
               readOnly: true
-            {{- if and .Values.database.tls.enabled .Values.database.tls.cacertPem }}
-            - name: db-ca-cert
-              mountPath: /db-certs
-              readOnly: true
-            {{- end }}
       volumes:
         - name: admin-public-key
           secret:
@@ -328,11 +289,6 @@ spec:
             items:
               - key: {{ default "admin_public.pem" .Values.backend.adminApi.existingSecretKey }}
                 path: admin_public.pem
-        {{- if and .Values.database.tls.enabled .Values.database.tls.cacertPem }}
-        - name: db-ca-cert
-          secret:
-            secretName: {{ $fullname }}-db-ca
-        {{- end }}
       {{- with .Values.backend.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
