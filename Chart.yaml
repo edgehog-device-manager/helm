@@ -1,0 +1,29 @@
+apiVersion: v2
+name: edgehog
+description: A Helm chart for Edgehog, the Open Source Device Manager Platform by SECO Mind
+type: application
+version: 0.1.0
+appVersion: "0.13.1"
+kubeVersion: ">=1.23.0-0"
+home: https://edgehog.io
+icon: https://edgehog.io/img/logo.svg
+sources:
+  - https://github.com/edgehog-device-manager/edgehog
+keywords:
+  - edgehog
+  - iot
+  - device-management
+  - astarte
+maintainers:
+  - name: luser
+dependencies:
+  - name: postgresql
+    version: 18.8.12
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: openfga
+    version: 0.3.12
+    repository: https://openfga.github.io/helm-charts
+    condition: openfga.enabled
+annotations:
+  license: Apache-2.0

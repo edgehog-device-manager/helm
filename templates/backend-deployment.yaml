@@ -1,0 +1,347 @@
+{{- $scheme := include "edgehog.urlScheme" . -}}
+{{- $portSuffix := include "edgehog.urlPortSuffix" . -}}
+{{- $fullname := include "edgehog.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-backend
+  labels:
+    {{- include "edgehog.componentLabels" (dict "root" . "component" "backend") | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "edgehog.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      {{- with .Values.backend.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "edgehog.componentLabels" (dict "root" . "component" "backend") | nindent 8 }}
+        {{- with .Values.backend.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "edgehog.serviceAccountName" . }}
+      {{- with .Values.backend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: edgehog-backend
+          image: {{ include "edgehog.image" (dict "root" . "image" .Values.backend.image "defaultTag" .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          {{- with .Values.backend.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+          env:
+            - name: RELEASE_NAME
+              value: edgehog
+            - name: PORT
+              value: "4000"
+            - name: URL_HOST
+              value: {{ required "backend.host is required" .Values.backend.host | quote }}
+            - name: URL_SCHEME
+              value: {{ $scheme | quote }}
+            {{- if .Values.url.port }}
+            - name: URL_PORT
+              value: {{ .Values.url.port | quote }}
+            {{- end }}
+            - name: DATABASE_HOSTNAME
+              value: {{ include "edgehog.databaseHostname" . | quote }}
+            - name: DATABASE_USERNAME
+              value: {{ .Values.database.username | quote }}
+            - name: DATABASE_NAME
+              value: {{ .Values.database.database | quote }}
+            - name: DATABASE_PASSWORD
+              {{- if .Values.database.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretPasswordKey }}
+              {{- else if and (not .Values.postgresql.enabled) .Values.database.password }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-db
+                  key: password
+              {{- else if not .Values.postgresql.enabled }}
+              {{- fail "database.password or database.existingSecret is required when postgresql.enabled is false" }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-postgresql" .Release.Name }}
+                  key: password
+              {{- end }}
+            {{- if .Values.database.poolSize }}
+            - name: POOL_SIZE
+              value: {{ .Values.database.poolSize | quote }}
+            {{- end }}
+            {{- if .Values.database.tls.enabled }}
+            - name: DATABASE_ENABLE_SSL
+              value: "true"
+            {{- if .Values.database.tls.cacertPem }}
+            - name: DATABASE_SSL_CACERTFILE
+              value: /db-certs/ca.crt
+            {{- end }}
+            {{- if .Values.database.tls.verify }}
+            - name: DATABASE_SSL_VERIFY
+              value: "true"
+            {{- end }}
+            {{- if .Values.database.tls.useOsCerts }}
+            - name: DATABASE_USE_OS_CERTS
+              value: "true"
+            {{- end }}
+            {{- end }}
+            - name: SECRET_KEY_BASE
+              {{- if .Values.backend.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.existingSecret }}
+                  key: {{ .Values.backend.existingSecretKey }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: {{ .Values.backend.existingSecretKey }}
+              {{- end }}
+            {{- if .Values.storage.maxUploadSizeBytes }}
+            - name: MAX_UPLOAD_SIZE_BYTES
+              value: {{ .Values.storage.maxUploadSizeBytes | quote }}
+            {{- end }}
+            - name: ADMIN_JWT_PUBLIC_KEY_PATH
+              value: /keys/admin_public.pem
+            {{- if .Values.forwarder.enabled }}
+            - name: EDGEHOG_FORWARDER_HOSTNAME
+              value: {{ required "forwarder.host is required when forwarder.enabled is true" .Values.forwarder.host | quote }}
+            - name: EDGEHOG_FORWARDER_PORT
+              value: {{ include "edgehog.forwarderExternalPort" . | quote }}
+            - name: EDGEHOG_FORWARDER_SECURE_SESSIONS
+              value: {{ ternary "true" "false" .Values.ingress.tls.enabled | quote }}
+            {{- end }}
+            {{- if .Values.backend.gqlSubscriptionsAllowedOrigins }}
+            - name: GQL_SUBSCRIPTIONS_ALLOWED_ORIGINS
+              value: {{ .Values.backend.gqlSubscriptionsAllowedOrigins | quote }}
+            {{- else if .Values.frontend.enabled }}
+            - name: GQL_SUBSCRIPTIONS_ALLOWED_ORIGINS
+              value: {{ printf "%s://%s%s" $scheme .Values.frontend.host $portSuffix | quote }}
+            {{- end }}
+            {{- if eq .Values.storage.type "azure" }}
+            - name: STORAGE_TYPE
+              value: azure
+            - name: AZURE_CONTAINER
+              value: {{ required "storage.azure.container is required" .Values.storage.azure.container | quote }}
+            {{- if .Values.storage.azure.existingSecret }}
+            - name: AZURE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.storage.azure.existingSecret }}
+                  key: {{ .Values.storage.azure.existingSecretConnectionStringKey }}
+            {{- else if .Values.storage.azure.connectionString }}
+            - name: AZURE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-azure
+                  key: connection-string
+            {{- else }}
+            - name: AZURE_STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-azure
+                  key: account-name
+            - name: AZURE_STORAGE_ACCOUNT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-azure
+                  key: account-key
+            {{- if .Values.storage.azure.blobEndpoint }}
+            - name: AZURE_BLOB_ENDPOINT
+              value: {{ .Values.storage.azure.blobEndpoint | quote }}
+            {{- end }}
+            {{- if .Values.storage.azure.region }}
+            - name: AZURE_REGION
+              value: {{ .Values.storage.azure.region | quote }}
+            {{- end }}
+            {{- end }}
+            {{- else }}
+            {{- $s3 := .Values.storage.s3 }}
+            - name: S3_SCHEME
+              value: {{ $s3.scheme | quote }}
+            - name: S3_HOST
+              value: {{ required "storage.s3.host is required" $s3.host | quote }}
+            {{- if $s3.port }}
+            - name: S3_PORT
+              value: {{ $s3.port | quote }}
+            {{- end }}
+            - name: S3_BUCKET
+              value: {{ required "storage.s3.bucket is required" $s3.bucket | quote }}
+            {{- if $s3.region }}
+            - name: S3_REGION
+              value: {{ $s3.region | quote }}
+            {{- end }}
+            {{- if $s3.assetHost }}
+            - name: S3_ASSET_HOST
+              value: {{ $s3.assetHost | quote }}
+            {{- end }}
+            {{- if $s3.gcpCredentialsJson }}
+            - name: S3_GCP_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-s3
+                  key: gcp-credentials
+            {{- else if $s3.existingSecret }}
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $s3.existingSecret }}
+                  key: {{ $s3.existingSecretAccessKeyIdKey }}
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $s3.existingSecret }}
+                  key: {{ $s3.existingSecretSecretAccessKeyKey }}
+            {{- else }}
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-s3
+                  key: access-key-id
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-s3
+                  key: secret-access-key
+            {{- end }}
+            {{- end }}
+            {{- $geo := .Values.geolocation }}
+            {{- if $geo.ipbaseApiKey }}
+            - name: IPBASE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-geo
+                  key: ipbase-api-key
+            {{- end }}
+            {{- if $geo.googleGeolocationApiKey }}
+            - name: GOOGLE_GEOLOCATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-geo
+                  key: google-geolocation-api-key
+            {{- end }}
+            {{- if $geo.googleGeocodingApiKey }}
+            - name: GOOGLE_GEOCODING_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-geo
+                  key: google-geocoding-api-key
+            {{- end }}
+            {{- if $geo.preferredGeolocationProviders }}
+            - name: PREFERRED_GEOLOCATION_PROVIDERS
+              value: {{ $geo.preferredGeolocationProviders | quote }}
+            {{- end }}
+            {{- if $geo.preferredGeocodingProviders }}
+            - name: PREFERRED_GEOCODING_PROVIDERS
+              value: {{ $geo.preferredGeocodingProviders | quote }}
+            {{- end }}
+            {{- if eq .Values.authorization.provider "openfga" }}
+            - name: EDGEHOG_AUTHZ_PROVIDER
+              value: openfga
+            - name: EDGEHOG_OPENFGA_GRPC_ENDPOINT
+              value: {{ include "edgehog.openfgaGrpcEndpoint" . | quote }}
+            {{- if .Values.authorization.storeId }}
+            - name: EDGEHOG_OPENFGA_STORE_ID
+              value: {{ .Values.authorization.storeId | quote }}
+            - name: EDGEHOG_OPENFGA_AUTH_MODEL_ID
+              value: {{ .Values.authorization.authModelId | quote }}
+            {{- else }}
+            - name: EDGEHOG_OPENFGA_STORE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "edgehog.openfgaStoreSecretName" . }}
+                  key: store-id
+            - name: EDGEHOG_OPENFGA_AUTH_MODEL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "edgehog.openfgaStoreSecretName" . }}
+                  key: auth-model-id
+            {{- end }}
+            {{- end }}
+            {{- with .Values.tuning }}
+            {{- if .tenantReconcilerTimeoutMs }}
+            - name: EDGEHOG_TENANT_RECONCILER_TIMEOUT
+              value: {{ .tenantReconcilerTimeoutMs | quote }}
+            {{- end }}
+            {{- if .messageMinTimeoutMs }}
+            - name: EDGEHOG_MESSAGE_MIN_TIMEOUT
+              value: {{ .messageMinTimeoutMs | quote }}
+            {{- end }}
+            {{- if .messageMaxTimeoutMs }}
+            - name: EDGEHOG_MESSAGE_MAX_TIMEOUT
+              value: {{ .messageMaxTimeoutMs | quote }}
+            {{- end }}
+            {{- if .provisioningMaxRetries }}
+            - name: EDGEHOG_PROVISIONING_MAX_RETRIES
+              value: {{ .provisioningMaxRetries | quote }}
+            {{- end }}
+            {{- if .deploymentProvisioningTimeoutMs }}
+            - name: EDGEHOG_DEPLOYMENT_PROVISIONING_TIMEOUT
+              value: {{ .deploymentProvisioningTimeoutMs | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.backend.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.backend.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.backend.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.backend.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: admin-public-key
+              mountPath: /keys
+              readOnly: true
+            {{- if and .Values.database.tls.enabled .Values.database.tls.cacertPem }}
+            - name: db-ca-cert
+              mountPath: /db-certs
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: admin-public-key
+          secret:
+            secretName: {{ default (printf "%s-admin-key" $fullname) .Values.backend.adminApi.existingSecret }}
+            items:
+              - key: {{ default "admin_public.pem" .Values.backend.adminApi.existingSecretKey }}
+                path: admin_public.pem
+        {{- if and .Values.database.tls.enabled .Values.database.tls.cacertPem }}
+        - name: db-ca-cert
+          secret:
+            secretName: {{ $fullname }}-db-ca
+        {{- end }}
+      {{- with .Values.backend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

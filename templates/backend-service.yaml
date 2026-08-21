@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edgehog.fullname" . }}-backend
+  labels:
+    {{- include "edgehog.componentLabels" (dict "root" . "component" "backend") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "edgehog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: backend

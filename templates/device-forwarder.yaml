@@ -1,0 +1,110 @@
+{{- if .Values.forwarder.enabled }}
+{{- $fullname := include "edgehog.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-device-forwarder
+  labels:
+    {{- include "edgehog.componentLabels" (dict "root" . "component" "device-forwarder") | nindent 4 }}
+spec:
+  replicas: {{ .Values.forwarderConfig.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "edgehog.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: device-forwarder
+  template:
+    metadata:
+      {{- with .Values.forwarderConfig.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "edgehog.componentLabels" (dict "root" . "component" "device-forwarder") | nindent 8 }}
+        {{- with .Values.forwarderConfig.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "edgehog.serviceAccountName" . }}
+      {{- with .Values.forwarderConfig.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: edgehog-device-forwarder
+          image: {{ include "edgehog.image" (dict "root" . "image" .Values.forwarderConfig.image "defaultTag" "0.1.0") }}
+          imagePullPolicy: {{ .Values.forwarderConfig.image.pullPolicy }}
+          {{- with .Values.forwarderConfig.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: RELEASE_NAME
+              value: edgehog-device-forwarder
+            - name: PORT
+              value: {{ .Values.forwarderConfig.containerPort | quote }}
+            - name: PHX_HOST
+              value: {{ required "forwarder.host is required when forwarder.enabled is true" .Values.forwarder.host | quote }}
+            - name: SECRET_KEY_BASE
+              {{- if .Values.forwarderConfig.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.forwarderConfig.existingSecret }}
+                  key: {{ .Values.forwarderConfig.existingSecretKey }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: forwarder-{{ .Values.forwarderConfig.existingSecretKey }}
+              {{- end }}
+            {{- with .Values.forwarderConfig.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.forwarderConfig.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.forwarderConfig.containerPort }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.forwarderConfig.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.forwarderConfig.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.forwarderConfig.resources | nindent 12 }}
+      {{- with .Values.forwarderConfig.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.forwarderConfig.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.forwarderConfig.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-device-forwarder
+  labels:
+    {{- include "edgehog.componentLabels" (dict "root" . "component" "device-forwarder") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "edgehog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: device-forwarder
+
+{{- end }}

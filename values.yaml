@@ -1,0 +1,347 @@
+# Default values for the Edgehog Helm chart.
+#
+# Edgehog requires an external Astarte instance (with an existing realm and its
+# private key) and an S3-compatible storage. Tenants are provisioned after the
+# installation through the Admin API (see NOTES.txt and README.md).
+
+global:
+  ## Global Docker image registry.
+  imageRegistry: ""
+  ## Global image pull secrets.
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+## ---------------------------------------------------------------------------
+## Hosts
+##
+## Three DNS names must point to the ingress of the cluster:
+##   - frontend.host: the Edgehog dashboard
+##   - backend.host:  the Edgehog GraphQL/REST API
+##   - forwarder.host: the Device Forwarder (WebSocket sessions with devices)
+## ---------------------------------------------------------------------------
+frontend:
+  enabled: true
+  host: ""
+
+backend:
+  host: ""
+
+forwarder:
+  enabled: true
+  host: ""
+
+## Scheme and port used by browsers/devices to reach the backend and frontend.
+## When empty, scheme is derived from ingress.tls.enabled (https/http) and no
+## explicit port is advertised (standard 443/80 assumed).
+url:
+  scheme: ""
+  port: ""
+
+ingress:
+  enabled: true
+  className: nginx
+  ## Extra annotations for the Ingress object.
+  annotations: {}
+  tls:
+    enabled: true
+    secretName: edgehog-tls
+  ## Override for nginx.ingress.kubernetes.io/proxy-body-size.
+  ## Defaults to storage.maxUploadSizeBytes.
+  proxyBodySize: ""
+  proxyReadTimeout: "120"
+  proxySendTimeout: "120"
+
+## ---------------------------------------------------------------------------
+## Backend
+## ---------------------------------------------------------------------------
+backend:
+  image:
+    registry: ""
+    repository: edgehogdevicemanager/edgehog-backend
+    tag: ""             # defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  ## Phoenix SecretKeyBase. If left empty, a random one is generated on the
+  ## first install and persisted in the <fullname> secret across upgrades.
+  secretKeyBase: ""
+  existingSecret: ""    # alternative: name of an existing secret with key "secret-key-base"
+  existingSecretKey: "secret-key-base"
+
+  ## Public PEM key used to validate Admin API JWTs (the private half stays
+  ## with whoever provisions tenants). Generate with:
+  ##   openssl ecparam -name prime256v1 -genkey -noout > admin_private.pem
+  ##   openssl ec -in admin_private.pem -pubout > admin_public.pem
+  adminApi:
+    publicKeyPem: ""
+    existingSecret: ""
+    existingSecretKey: "admin_public.pem"
+
+  ## Comma-separated list of origins allowed for GraphQL subscriptions.
+  ## Defaults to the frontend origin derived from frontend.host/url.*.
+  gqlSubscriptionsAllowedOrigins: ""
+
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+  podSecurityContext: {}
+  securityContext: {}
+
+  livenessProbe:
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+  extraEnv: []
+  extraEnvFrom: []
+
+## ---------------------------------------------------------------------------
+## Database
+##
+## When postgresql.enabled is true, hostname/password are resolved from the
+## bundled chart (password is read from its generated secret). Otherwise set
+## database.hostname plus one of database.password / database.existingSecret.
+## ---------------------------------------------------------------------------
+database:
+  username: edgehog     # keep in sync with postgresql.auth.username
+  database: edgehog     # keep in sync with postgresql.auth.database
+  hostname: ""          # required when postgresql.enabled is false
+  password: ""          # plaintext fallback for external databases
+  existingSecret: ""
+  existingSecretPasswordKey: "password"
+  poolSize: 10
+  tls:
+    enabled: false
+    verify: false
+    useOsCerts: false
+    cacertPem: ""       # CA certificate PEM, mounted and passed via DATABASE_SSL_CACERTFILE
+
+postgresql:
+  enabled: true
+  auth:
+    username: edgehog   # keep in sync with database.username
+    database: edgehog   # keep in sync with database.database
+    password: ""        # auto-generated and stored in the <release>-postgresql secret
+  primary:
+    persistence:
+      size: 8Gi
+
+## ---------------------------------------------------------------------------
+## Storage (S3-compatible or Azure Blob)
+## ---------------------------------------------------------------------------
+storage:
+  type: s3              # s3 | azure
+  maxUploadSizeBytes: "4000000000"
+
+  s3:
+    scheme: https
+    host: ""            # e.g. s3.amazonaws.com or storage.googleapis.com (enables the GCS adapter)
+    port: ""
+    bucket: ""
+    region: ""
+    ## Public/presigning host for asset URLs, e.g. "storage.googleapis.com/<bucket>"
+    ## or "<bucket>.s3.amazonaws.com".
+    assetHost: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+    existingSecret: ""
+    existingSecretAccessKeyIdKey: "access-key-id"
+    existingSecretSecretAccessKeyKey: "secret-access-key"
+    ## Google Cloud Storage service account credentials (single-line JSON).
+    gcpCredentialsJson: ""
+
+  azure:
+    container: ""
+    connectionString: ""
+    accountName: ""
+    accountKey: ""
+    blobEndpoint: ""
+    region: ""
+    existingSecret: ""
+    existingSecretConnectionStringKey: "connection-string"
+    existingSecretAccountNameKey: "account-name"
+    existingSecretAccountKeyKey: "account-key"
+
+## ---------------------------------------------------------------------------
+## Geolocation providers (all optional)
+## ---------------------------------------------------------------------------
+geolocation:
+  ipbaseApiKey: ""
+  googleGeolocationApiKey: ""
+  googleGeocodingApiKey: ""
+  preferredGeolocationProviders: ""
+  preferredGeocodingProviders: ""
+  ## Alternative to the values above; expected keys:
+  ## ipbase-api-key, google-geolocation-api-key, google-geocoding-api-key
+  existingSecret: ""
+
+## ---------------------------------------------------------------------------
+## Authorization (OpenFGA)
+## ---------------------------------------------------------------------------
+authorization:
+  provider: openfga     # none | openfga
+  ## gRPC endpoint of OpenFGA. Defaults to <release>-openfga:8081 when the
+  ## bundled subchart is enabled.
+  grpcEndpoint: ""
+  ## Explicit store/model IDs. When set they take precedence over the secret
+  ## created by openfgaInitJob.
+  storeId: ""
+  authModelId: ""
+  ## Alternative source for the IDs; keys: store-id, auth-model-id.
+  existingStoreSecret: ""
+
+openfga:
+  enabled: true
+  datastore:
+    engine: memory
+  ## Helm merges this chart's top-level values into same-named subchart
+  ## sections; reset the ones that would otherwise leak in.
+  ingress:
+    enabled: false
+  serviceAccount:
+    create: true
+  ## For production, persist authorization data in PostgreSQL, e.g.:
+  ## datastore:
+  ##   engine: postgres
+  ##   uri: postgres://edgehog:<password>@<host>:5432/openfga
+
+openfgaInitJob:
+  ## Creates an OpenFGA store with the Edgehog authorization model and writes
+  ## the resulting IDs into a secret consumed by the backend. Runs as a
+  ## pre-install hook.
+  enabled: true
+  secretName: ""        # defaults to <fullname>-openfga-store
+  fgaCliVersion: "0.7.13"
+  cliPlatform: "linux_amd64"
+  image:
+    registry: ""
+    repository: alpine
+    tag: "3.24"
+    pullPolicy: IfNotPresent
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 600
+  resources: {}
+  podAnnotations: {}
+  podLabels: {}
+  securityContext: {}
+
+## ---------------------------------------------------------------------------
+## Device Forwarder
+## ---------------------------------------------------------------------------
+forwarderConfig:
+  image:
+    registry: ""
+    repository: edgehogdevicemanager/edgehog-device-forwarder
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  ## SecretKeyBase for the forwarder release. Generated and persisted like the
+  ## backend one when left empty.
+  secretKeyBase: ""
+  existingSecret: ""
+  existingSecretKey: "secret-key-base"
+
+  containerPort: 4000
+
+  ## Port devices use to reach the forwarder. Defaults to 443 (TLS) or 80
+  ## depending on ingress.tls.enabled.
+  externalPort: ""
+
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+
+  livenessProbe:
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+  extraEnv: []
+  extraEnvFrom: []
+
+frontendConfig:
+  image:
+    registry: ""
+    repository: edgehogdevicemanager/edgehog-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  ## Hides tenant management UI elements (useful when embedding the dashboard).
+  hideNavigationElements: ""
+
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  extraEnv: []
+  extraEnvFrom: []
+
+## ---------------------------------------------------------------------------
+## Miscellaneous tuning knobs for the backend (empty = backend default)
+## ---------------------------------------------------------------------------
+tuning:
+  tenantReconcilerTimeoutMs: ""
+  messageMinTimeoutMs: ""
+  messageMaxTimeoutMs: ""
+  provisioningMaxRetries: ""
+  deploymentProvisioningTimeoutMs: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false

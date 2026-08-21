@@ -1,0 +1,62 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "edgehog.fullname" . }}
+  labels:
+    {{- include "edgehog.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.proxyBodySize | default .Values.storage.maxUploadSizeBytes | quote }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyReadTimeout | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxySendTimeout | quote }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ required "frontend.host is required" .Values.frontend.host }}
+        - {{ required "backend.host is required" .Values.backend.host }}
+        {{- if .Values.forwarder.enabled }}
+        - {{ required "forwarder.host is required when forwarder.enabled is true" .Values.forwarder.host }}
+        {{- end }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    {{- if .Values.frontend.enabled }}
+    - host: {{ required "frontend.host is required" .Values.frontend.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "edgehog.fullname" . }}-frontend
+                port:
+                  number: 80
+    {{- end }}
+    - host: {{ required "backend.host is required" .Values.backend.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "edgehog.fullname" . }}-backend
+                port:
+                  number: 4000
+    {{- if .Values.forwarder.enabled }}
+    - host: {{ required "forwarder.host is required when forwarder.enabled is true" .Values.forwarder.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "edgehog.fullname" . }}-device-forwarder
+                port:
+                  number: 4000
+    {{- end }}
