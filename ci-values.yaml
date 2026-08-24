@@ -1,0 +1,12 @@
+backend:
+  host: edgehog.example.test
+  database:
+    hostname: postgres.example.test
+    passwordExistingSecret: fake-db-secret
+  storage:
+    s3:
+      host: s3.example.test
+      bucket: fake-bucket
+
+forwarder:
+  host: forwarder.example.test

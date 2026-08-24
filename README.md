@@ -8,21 +8,23 @@ The chart deploys:
 - **Backend** (`edgehogdevicemanager/edgehog-backend`) — Elixir/Phoenix API server
 - **Frontend** (`edgehogdevicemanager/edgehog-frontend`) — nginx-served dashboard
 - **Device Forwarder** (`edgehogdevicemanager/edgehog-device-forwarder`) — WebSocket relay for device sessions (optional)
-- **PostgreSQL** (bitnami subchart, optional) — database for the backend
-- **OpenFGA** (subchart, optional) + a pre-install Job that creates the authorization store/model
+
+Routing (Ingress objects), TLS certificates and the PostgreSQL database are
+**not** managed by this chart: they are prerequisites you bring with you.
 
 ## Prerequisites
 
 - Kubernetes 1.23+ with Helm 3.8+
-- An ingress controller (defaults assume `nginx`)
-- DNS names for three hosts pointing at the cluster:
-  - frontend host (dashboard)
-  - backend host (API)
-  - device forwarder host
+- An external **PostgreSQL** database reachable from the cluster
 - An external **Astarte** instance with an existing realm and its private key
   (tenants are provisioned post-install; see below)
 - An **S3-compatible storage** bucket (or Azure Blob container) for OTA updates and files
-- TLS certificates for the three hosts (e.g. via cert-manager)
+- DNS names for three hosts pointing at your routing:
+  - frontend host (dashboard)
+  - backend host (API)
+  - device forwarder host
+- TLS certificates for the three hosts (e.g. via cert-manager) and the routing
+  itself (Ingress, Gateway, LoadBalancer — whatever fits your cluster)
 
 ## Installing
 
@@ -31,76 +33,49 @@ The chart deploys:
 openssl ecparam -name prime256v1 -genkey -noout > admin_private.pem
 openssl ec -in admin_private.pem -pubout > admin_public.pem
 
-helm dependency update
-
 helm install edgehog . \
   --set frontend.host=edgehog.example.com \
   --set backend.host=api.edgehog.example.com \
   --set forwarder.host=forwarder.edgehog.example.com \
-  --set storage.s3.host=s3.amazonaws.com \
-  --set storage.s3.bucket=my-bucket \
-  --set storage.s3.region=eu-west-1 \
-  --set storage.s3.assetHost=my-bucket.s3.amazonaws.com \
-  --set storage.s3.accessKeyId=... \
-  --set storage.s3.secretAccessKey=... \
+  --set backend.database.hostname=postgres.example.com \
+  --set backend.database.passwordExistingSecret=edgehog-postgresql \
+  --set backend.storage.s3.host=s3.amazonaws.com \
+  --set backend.storage.s3.bucket=my-bucket \
+  --set backend.storage.s3.region=eu-west-1 \
+  --set backend.storage.s3.assetHost=my-bucket.s3.amazonaws.com \
+  --set backend.storage.s3.accessKeyId=... \
+  --set backend.storage.s3.secretAccessKey=... \
   --set backend.adminApi.publicKeyPem="$(cat admin_public.pem)"
 ```
 
 Secret key bases are generated automatically on first install and persisted in
 the release secret across upgrades.
 
-### External PostgreSQL
+### Database
+
+The backend requires an external PostgreSQL database. Connection settings live
+under `backend.database`; the password is always referenced from an existing
+Secret and never set in values:
 
 ```yaml
-postgresql:
-  enabled: false
-database:
-  hostname: postgres.example.com
-  password: ...        # or use existingSecret
+backend:
+  database:
+    hostname: postgres.example.com
+    username: edgehog          # default
+    database: edgehog          # default
+    poolSize: 10               # default
+    passwordExistingSecret: edgehog-postgresql
+    passwordExistingSecretKey: password   # default
 ```
 
-### Enabling OpenFGA / Device Forwarder
+Non-standard TLS setups for the database connection can be wired through
+`backend.extraEnv` (e.g. `DATABASE_ENABLE_SSL`, `DATABASE_USE_OS_CERTS`).
 
-Authorization defaults to the backend's `none` provider (matching typical
-deployments). To enable OpenFGA, flip both flags:
-
-```yaml
-authorization:
-  provider: openfga
-openfga:
-  enabled: true
-```
-
-The forwarder is enabled by default; disable it with:
+### Disabling the Device Forwarder
 
 ```yaml
 forwarder:
   enabled: false
-```
-
-When using an existing OpenFGA instance, point the backend at it and provide the
-store IDs created from this chart's bundled model (`files/fga`):
-
-```yaml
-openfga:
-  enabled: false
-authorization:
-  provider: openfga
-  grpcEndpoint: openfga.other-namespace:8081
-  storeId: "<id>"
-  authModelId: "<id>"
-```
-
-### OpenFGA datastore
-
-The bundled OpenFGA defaults to an in-memory datastore (fine for testing). For
-production, persist its data, e.g. reusing the bundled PostgreSQL:
-
-```yaml
-openfga:
-  datastore:
-    engine: postgres
-    uri: postgres://edgehog:<password>@<release>-postgresql:5432/openfga
 ```
 
 ## Post-install: provisioning a tenant
@@ -138,13 +113,13 @@ Secret instead of values, which is the recommended setup under GitOps
 | Secret | Values knob | Expected keys |
 |---|---|---|
 | Phoenix key base (backend) | `backend.existingSecret` | `secret-key-base` |
-| Phoenix key base (forwarder) | `forwarderConfig.existingSecret` | `secret-key-base` |
-| Database credentials | `database.existingSecret` | username, password (+ hostname via `database.hostname`) |
+| Phoenix key base (forwarder) | `forwarder.existingSecret` | `secret-key-base` |
+| Database password | `backend.database.passwordExistingSecret` | `password` |
 | Admin API public key | `backend.adminApi.existingSecret` | `admin_public.pem` |
-| S3 credentials | `storage.s3.existingSecret` | access-key-id, secret-access-key (or gcp-credentials) |
-| Azure credentials | `storage.azure.existingSecret` | connection-string or account-name/account-key |
-| Geolocation API keys | `geolocation.existingSecret` | ipbase-api-key, google-geolocation-api-key, google-geocoding-api-key |
-| OpenFGA store IDs | `authorization.existingStoreSecret` | store-id, auth-model-id |
+| S3 credentials | `backend.storage.s3.existingSecret` | access-key-id, secret-access-key |
+| GCS service account JSON | `backend.storage.s3.gcpCredentialsExistingSecret` | credentials.json |
+| Azure credentials | `backend.storage.azure.existingSecret` | connection-string or account-name/account-key |
+| Geolocation API keys | `backend.geolocation.existingSecret` | ipbase-api-key, google-geolocation-api-key, google-geocoding-api-key |
 
 Example modeled on a GCP Secret Manager-backed ClusterSecretStore:
 
@@ -177,20 +152,13 @@ backend:
   given, the chart generates secret key bases with `randAlphaNum`, which
   re-renders to a new value on every sync and causes permanent `OutOfSync`
   drift. Under Argo CD always provide them via External Secrets.
-- **OpenFGA store IDs.** The pre-install init Job writes its result into a
-  Secret that is not tracked as a regular manifest. For GitOps installs prefer
-  explicit `authorization.storeId` / `authorization.authModelId` (or an
-  `existingStoreSecret`) over the job-generated one.
 
 ## Upgrading
 
 - Generated secrets (secret key bases) are reused across upgrades via lookup.
-- The OpenFGA init Job only runs on `helm install` (pre-install hook); the store
-  IDs secret persists. Reinstalling the release creates a new store — pass
-  `authorization.storeId`/`authModelId` explicitly to reuse an existing one.
 
 ## Values
 
 See [values.yaml](values.yaml) for the full list of supported values, including
-Azure Blob storage, geolocation providers, DB TLS, resource limits, probes,
+Azure Blob storage, geolocation providers, resource limits, probes,
 nodeSelector/tolerations/affinity, and extra environment variables per component.
