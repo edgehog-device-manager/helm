@@ -19,7 +19,7 @@ jobs:
           version: v3.15.3
 
       - name: Update chart dependencies
-        run: helm dependency update .
+        run: helm dependency update charts/edgehog
 
       - name: Create kind cluster
         uses: helm/kind-action@v1.10.0
@@ -28,13 +28,13 @@ jobs:
 
       - name: helm install --dry-run against live API (server-side validation)
         run: |
-          helm install test-release . \
+          helm install test-release charts/edgehog \
             --dry-run \
             --debug \
-            --values values.yaml
+            --values charts/edgehog/values.yaml
 
       - name: helm install (actual) and verify rollout
         run: |
-          helm install test-release . --values values.yaml --wait --timeout 2m
+          helm install test-release charts/edgehog --values charts/edgehog/values.yaml --wait --timeout 2m
           helm test test-release || true
           kubectl get all

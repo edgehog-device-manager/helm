@@ -33,7 +33,7 @@ Routing (Ingress objects), TLS certificates and the PostgreSQL database are
 openssl ecparam -name prime256v1 -genkey -noout > admin_private.pem
 openssl ec -in admin_private.pem -pubout > admin_public.pem
 
-helm install edgehog . \
+helm install edgehog charts/edgehog \
   --set frontend.host=edgehog.example.com \
   --set backend.host=api.edgehog.example.com \
   --set forwarder.host=forwarder.edgehog.example.com \
@@ -159,6 +159,6 @@ backend:
 
 ## Values
 
-See [values.yaml](values.yaml) for the full list of supported values, including
+See [values.yaml](charts/edgehog/values.yaml) for the full list of supported values, including
 Azure Blob storage, geolocation providers, resource limits, probes,
 nodeSelector/tolerations/affinity, and extra environment variables per component.
