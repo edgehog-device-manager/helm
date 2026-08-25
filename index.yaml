@@ -1,0 +1,29 @@
+apiVersion: v1
+entries:
+  edgehog:
+  - annotations:
+      license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.13.1
+    created: "2026-08-25T07:56:29.380528472Z"
+    description: A Helm chart for Edgehog, the Open Source Device Manager Platform
+      by SECO Mind
+    digest: 8981593d7bab4bcf79d30778bb2ea38befbfd52b9cbb69d1d04a3904140b9cd5
+    home: https://edgehog.io
+    icon: https://edgehog.io/img/logo.svg
+    keywords:
+    - edgehog
+    - iot
+    - device-management
+    - astarte
+    kubeVersion: '>=1.23.0-0'
+    maintainers:
+    - name: luser
+    name: edgehog
+    sources:
+    - https://github.com/edgehog-device-manager/edgehog
+    type: application
+    urls:
+    - https://github.com/edgehog-device-manager/helm/releases/download/edgehog-0.3.0/edgehog-0.3.0.tgz
+    version: 0.3.0
+generated: "2026-08-25T07:56:29.380535686Z"
