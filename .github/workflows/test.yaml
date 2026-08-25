@@ -23,8 +23,6 @@ jobs:
 
       - name: Create kind cluster
         uses: helm/kind-action@v1.10.0
-        with:
-          node_image: kindest/node:latest # TODO: use a pinnded version of kindest/node
 
       - name: helm install --dry-run against live API (server-side validation)
         run: |
