@@ -30,7 +30,7 @@ jobs:
       - name: yamllint
         run: |
           pip install yamllint
-          yamllint -c .yamllint.yaml .
+          yamllint -c .yamllint .
 
       - name: Update chart dependencies
         run: helm dependency update charts/edgehog
