@@ -1,0 +1,16 @@
+backend:
+  host: edgehog.example.test
+  adminApi:
+    existingSecret: admin-key-secret
+  database:
+    hostname: postgres-rw
+    passwordExistingSecret: edgehog-db-secret
+  storage:
+    s3:
+      host: s3.example.test
+      bucket: test-bucket
+      accessKeyId: test-access-key
+      secretAccessKey: test-secret-key
+
+forwarder:
+  host: forwarder.example.test
