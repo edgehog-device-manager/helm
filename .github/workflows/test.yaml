@@ -22,7 +22,7 @@ jobs:
         run: helm dependency update charts/edgehog
 
       - name: Create kind cluster
-        uses: helm/kind-action@v1.10.0
+        uses: helm/kind-action@v1.14.0
 
       - name: Wait for kind cluster to be ready
         run: |
