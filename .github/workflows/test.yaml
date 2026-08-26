@@ -24,15 +24,49 @@ jobs:
       - name: Create kind cluster
         uses: helm/kind-action@v1.10.0
 
+      - name: Wait for kind cluster to be ready
+        run: |
+          kubectl cluster-info
+          kubectl wait --for=condition=Ready nodes --all --timeout=120s
+          kubectl wait --for=condition=Ready pod -n kube-system --all --timeout=120s
+
+      - name: Create database secret
+        run: |
+          kubectl create secret generic edgehog-db-secret \
+            --from-literal=username=edgehog \
+            --from-literal=password=test-password
+
+      - name: Create admin-key-secret
+        run: |
+          openssl ecparam -name prime256v1 -genkey -noout | \
+            openssl ec -pubout -out admin_public.pem 2>/dev/null
+          kubectl create secret generic admin-key-secret \
+            --from-file=admin_public.pem=admin_public.pem
+
+      - name: Install CloudNativePG operator
+        run: |
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          helm repo update
+          helm upgrade --install cnpg \
+            --namespace cnpg-system \
+            --create-namespace \
+            cnpg/cloudnative-pg \
+            --wait --timeout 120s
+
+      - name: Deploy PostgreSQL cluster
+        run: |
+          kubectl apply -f tests/manifests/postgres.yaml
+          kubectl wait --for=condition=Ready cluster/postgres --timeout=180s
+
       - name: helm install --dry-run against live API (server-side validation)
         run: |
           helm install test-release charts/edgehog \
             --dry-run \
             --debug \
-            --values charts/edgehog/values.yaml
+            --values tests/values.yaml
 
       - name: helm install (actual) and verify rollout
         run: |
-          helm install test-release charts/edgehog --values charts/edgehog/values.yaml --wait --timeout 2m
+          helm install test-release charts/edgehog --values tests/values.yaml --wait --timeout 2m
           helm test test-release || true
           kubectl get all

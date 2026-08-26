@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: helm lint
-        run: helm lint charts/edgehog --strict --values ci-values.yaml
+        run: helm lint charts/edgehog --strict --values tests/values.yaml
 
       - name: yamllint
         run: |
@@ -42,5 +42,5 @@ jobs:
 
       - name: Render templates and validate against Kubernetes schemas
         run: |
-          helm template charts/edgehog --values ci-values.yaml \
+          helm template charts/edgehog --values tests/values.yaml \
             | kubeconform -strict -summary -kubernetes-version "1.30.0"
