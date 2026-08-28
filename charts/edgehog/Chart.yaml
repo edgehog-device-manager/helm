@@ -6,7 +6,7 @@ version: 0.3.0
 appVersion: "0.13.1"
 kubeVersion: ">=1.23.0-0"
 home: https://edgehog.io
-icon: https://edgehog.io/img/logo.svg
+icon: https://raw.githubusercontent.com/edgehog-device-manager/docs/refs/heads/main/0.8/assets/logo.png
 sources:
   - https://github.com/edgehog-device-manager/edgehog
 keywords:
@@ -15,6 +15,11 @@ keywords:
   - device-management
   - astarte
 maintainers:
-  - name: luser
+  - email: luca.zaninotto@secomind.com
+    name: luser
+  - email: luca.marchiori@secomind.com
+    name: lucamarchiori
+  - email: guilherme.crocetti@secomind.com
+    name: guicrocetti
 annotations:
   license: Apache-2.0
