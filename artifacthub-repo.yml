@@ -1,0 +1,9 @@
+# artifacthub-repo.yml
+repositoryID: 058230d0-0228-47d6-a0ac-eec3ec1cde17
+owners:
+  - name: "Luca Zaninotto"
+    email: "luca.zaninotto@secomind.com"
+  - name: "Luca Marchiori"
+    email: "luca.marchiori@secomind.com"
+  - name: "Guilherme Crocetti"
+    email: "guilherme.crocetti@secomind.com"
