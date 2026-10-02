@@ -120,6 +120,9 @@ backend:
       ## Public/presigning host for asset URLs, e.g. "storage.googleapis.com/<bucket>"
       ## or "<bucket>.s3.amazonaws.com".
       assetHost: ""
+      ## Public path prefix to prepend to presigned URLs after signing.
+      ## Useful when MinIO is exposed behind an ingress with path-prefix routing and stripping (e.g. "/minio").
+      publicPathPrefix: ""
       accessKeyId: ""
       secretAccessKey: ""
       existingSecret: ""
