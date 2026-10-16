@@ -163,6 +163,10 @@ spec:
             - name: S3_ASSET_HOST
               value: {{ $s3.assetHost | quote }}
             {{- end }}
+            {{- if $s3.publicPathPrefix }}
+            - name: S3_PUBLIC_PATH_PREFIX
+              value: {{ $s3.publicPathPrefix | quote }}
+            {{- end }}
             {{- if $s3.gcpCredentialsExistingSecret }}
             - name: S3_GCP_CREDENTIALS
               valueFrom:
