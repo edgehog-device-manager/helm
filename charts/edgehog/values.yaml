@@ -199,7 +199,7 @@ forwarder:
   image:
     registry: ""
     repository: edgehogdevicemanager/edgehog-device-forwarder
-    tag: "0.1.0"
+    tag: "0.3.0"
     pullPolicy: IfNotPresent
 
   replicaCount: 1
